@@ -1,0 +1,79 @@
+{
+  "name": "serverless-ecommerce-backend",
+  "version": "1.0.0",
+  "description": "Production-ready serverless e-commerce backend with AWS Lambda, DynamoDB, and S3",
+  "main": "src/index.js",
+  "scripts": {
+    "local": "serverless offline start --stage local",
+    "deploy": "serverless deploy",
+    "deploy:dev": "serverless deploy --stage dev",
+    "deploy:prod": "serverless deploy --stage prod",
+    "remove": "serverless remove",
+    "remove:dev": "serverless remove --stage dev",
+    "remove:prod": "serverless remove --stage prod",
+    "test": "jest --verbose",
+    "test:unit": "jest tests/unit --verbose",
+    "test:integration": "jest tests/integration --verbose",
+    "test:coverage": "jest --coverage",
+    "test:watch": "jest --watch",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix",
+    "logs": "serverless logs -f createProduct --tail",
+    "logs:prod": "serverless logs -f createProduct --tail --stage prod",
+    "seed": "node scripts/seed-data.js",
+    "invoke": "serverless invoke local -f",
+    "info": "serverless info",
+    "info:prod": "serverless info --stage prod"
+  },
+  "keywords": [
+    "serverless",
+    "aws",
+    "lambda",
+    "dynamodb",
+    "s3",
+    "cloudfront",
+    "e-commerce",
+    "api",
+    "rest",
+    "nodejs",
+    "eventbridge"
+  ],
+  "author": "Mark Schulze",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MarkDSchulze/serverless-ecommerce-backend.git"
+  },
+  "bugs": {
+    "url": "https://github.com/MarkDSchulze/serverless-ecommerce-backend/issues"
+  },
+  "homepage": "https://github.com/MarkDSchulze/serverless-ecommerce-backend#readme",
+  "dependencies": {
+    "aws-sdk": "^2.1691.0",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "serverless": "^3.38.0",
+    "serverless-offline": "^13.3.3",
+    "serverless-dynamodb-local": "^0.2.40",
+    "eslint": "^8.57.0",
+    "aws-sdk-mock": "^5.9.0",
+    "@types/jest": "^29.5.11"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "coverageDirectory": "coverage",
+    "collectCoverageFrom": [
+      "src/**/*.js",
+      "!src/**/*.test.js"
+    ],
+    "testMatch": [
+      "**/tests/**/*.test.js"
+    ]
+  }
+}

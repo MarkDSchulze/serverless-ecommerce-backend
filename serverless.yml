@@ -1,0 +1,368 @@
+service: serverless-ecommerce-backend
+
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: ${env:AWS_REGION, 'us-east-1'}
+  stage: ${opt:stage, 'dev'}
+  
+  environment:
+    PRODUCTS_TABLE: ${self:service}-products-${self:provider.stage}
+    ORDERS_TABLE: ${self:service}-orders-${self:provider.stage}
+    CART_TABLE: ${self:service}-cart-${self:provider.stage}
+    IMAGES_BUCKET: ${self:service}-images-${self:provider.stage}
+    EVENT_BUS_NAME: ${self:service}-events-${self:provider.stage}
+    STAGE: ${self:provider.stage}
+    LOG_LEVEL: ${env:LOG_LEVEL, 'INFO'}
+  
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+            - dynamodb:Scan
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+            - dynamodb:BatchGetItem
+            - dynamodb:BatchWriteItem
+          Resource:
+            - !GetAtt ProductsTable.Arn
+            - !GetAtt OrdersTable.Arn
+            - !GetAtt CartTable.Arn
+            - !Sub "${ProductsTable.Arn}/index/*"
+            - !Sub "${OrdersTable.Arn}/index/*"
+        
+        - Effect: Allow
+          Action:
+            - s3:PutObject
+            - s3:GetObject
+            - s3:DeleteObject
+          Resource: !Sub "${ImagesBucket.Arn}/*"
+        
+        - Effect: Allow
+          Action:
+            - events:PutEvents
+          Resource: !GetAtt EventBus.Arn
+
+functions:
+  # Products
+  createProduct:
+    handler: src/handlers/products.createProduct
+    description: Create a new product
+    timeout: 10
+    memorySize: 256
+    events:
+      - http:
+          path: /products
+          method: post
+          cors: true
+  
+  getProducts:
+    handler: src/handlers/products.getProducts
+    description: List all products
+    timeout: 10
+    memorySize: 256
+    events:
+      - http:
+          path: /products
+          method: get
+          cors: true
+  
+  getProduct:
+    handler: src/handlers/products.getProduct
+    description: Get single product
+    timeout: 10
+    memorySize: 256
+    events:
+      - http:
+          path: /products/{productId}
+          method: get
+          cors: true
+  
+  updateProduct:
+    handler: src/handlers/products.updateProduct
+    description: Update product
+    timeout: 10
+    memorySize: 256
+    events:
+      - http:
+          path: /products/{productId}
+          method: put
+          cors: true
+  
+  deleteProduct:
+    handler: src/handlers/products.deleteProduct
+    description: Delete product
+    timeout: 10
+    memorySize: 256
+    events:
+      - http:
+          path: /products/{productId}
+          method: delete
+          cors: true
+  
+  # Images
+  uploadImage:
+    handler: src/handlers/images.uploadImage
+    description: Upload product image
+    timeout: 30
+    memorySize: 512
+    events:
+      - http:
+          path: /products/{productId}/images
+          method: post
+          cors: true
+  
+  # Cart
+  getCart:
+    handler: src/handlers/cart.getCart
+    description: Get user cart
+    timeout: 10
+    memorySize: 256
+    events:
+      - http:
+          path: /cart
+          method: get
+          cors: true
+  
+  addToCart:
+    handler: src/handlers/cart.addToCart
+    description: Add item to cart
+    timeout: 10
+    memorySize: 256
+    events:
+      - http:
+          path: /cart/items
+          method: post
+          cors: true
+  
+  updateCartItem:
+    handler: src/handlers/cart.updateCartItem
+    description: Update cart item
+    timeout: 10
+    memorySize: 256
+    events:
+      - http:
+          path: /cart/items/{itemId}
+          method: put
+          cors: true
+  
+  removeFromCart:
+    handler: src/handlers/cart.removeFromCart
+    description: Remove from cart
+    timeout: 10
+    memorySize: 256
+    events:
+      - http:
+          path: /cart/items/{itemId}
+          method: delete
+          cors: true
+  
+  # Orders
+  createOrder:
+    handler: src/handlers/orders.createOrder
+    description: Create new order
+    timeout: 30
+    memorySize: 512
+    events:
+      - http:
+          path: /orders
+          method: post
+          cors: true
+  
+  getOrders:
+    handler: src/handlers/orders.getOrders
+    description: List user orders
+    timeout: 10
+    memorySize: 256
+    events:
+      - http:
+          path: /orders
+          method: get
+          cors: true
+  
+  getOrder:
+    handler: src/handlers/orders.getOrder
+    description: Get order details
+    timeout: 10
+    memorySize: 256
+    events:
+      - http:
+          path: /orders/{orderId}
+          method: get
+          cors: true
+  
+  processOrderEvent:
+    handler: src/handlers/orders.processOrderEvent
+    description: Process order events
+    timeout: 30
+    memorySize: 512
+    events:
+      - eventBridge:
+          eventBus: !GetAtt EventBus.Arn
+          pattern:
+            source:
+              - ecommerce.orders
+            detail-type:
+              - OrderCreated
+
+resources:
+  Resources:
+    ProductsTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.PRODUCTS_TABLE}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: PK
+            AttributeType: S
+          - AttributeName: SK
+            AttributeType: S
+          - AttributeName: GSI1PK
+            AttributeType: S
+          - AttributeName: GSI1SK
+            AttributeType: S
+        KeySchema:
+          - AttributeName: PK
+            KeyType: HASH
+          - AttributeName: SK
+            KeyType: RANGE
+        GlobalSecondaryIndexes:
+          - IndexName: GSI1
+            KeySchema:
+              - AttributeName: GSI1PK
+                KeyType: HASH
+              - AttributeName: GSI1SK
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+        StreamSpecification:
+          StreamViewType: NEW_AND_OLD_IMAGES
+        Tags:
+          - Key: Environment
+            Value: ${self:provider.stage}
+          - Key: Project
+            Value: ${self:service}
+    
+    OrdersTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.ORDERS_TABLE}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: PK
+            AttributeType: S
+          - AttributeName: SK
+            AttributeType: S
+          - AttributeName: GSI1PK
+            AttributeType: S
+          - AttributeName: GSI1SK
+            AttributeType: S
+        KeySchema:
+          - AttributeName: PK
+            KeyType: HASH
+          - AttributeName: SK
+            KeyType: RANGE
+        GlobalSecondaryIndexes:
+          - IndexName: GSI1
+            KeySchema:
+              - AttributeName: GSI1PK
+                KeyType: HASH
+              - AttributeName: GSI1SK
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+        Tags:
+          - Key: Environment
+            Value: ${self:provider.stage}
+    
+    CartTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.CART_TABLE}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: PK
+            AttributeType: S
+          - AttributeName: SK
+            AttributeType: S
+        KeySchema:
+          - AttributeName: PK
+            KeyType: HASH
+          - AttributeName: SK
+            KeyType: RANGE
+        TimeToLiveSpecification:
+          AttributeName: ttl
+          Enabled: true
+        Tags:
+          - Key: Environment
+            Value: ${self:provider.stage}
+    
+    ImagesBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: ${self:provider.environment.IMAGES_BUCKET}
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: true
+          BlockPublicPolicy: true
+          IgnorePublicAcls: true
+          RestrictPublicBuckets: true
+        CorsConfiguration:
+          CorsRules:
+            - AllowedOrigins:
+                - '*'
+              AllowedMethods:
+                - GET
+                - PUT
+                - POST
+              AllowedHeaders:
+                - '*'
+              MaxAge: 3000
+        VersioningConfiguration:
+          Status: Enabled
+        Tags:
+          - Key: Environment
+            Value: ${self:provider.stage}
+    
+    EventBus:
+      Type: AWS::Events::EventBus
+      Properties:
+        Name: ${self:provider.environment.EVENT_BUS_NAME}
+        Tags:
+          - Key: Environment
+            Value: ${self:provider.stage}
+  
+  Outputs:
+    ProductsTableName:
+      Value: !Ref ProductsTable
+      Export:
+        Name: ${self:service}-${self:provider.stage}-ProductsTable
+    
+    OrdersTableName:
+      Value: !Ref OrdersTable
+      Export:
+        Name: ${self:service}-${self:provider.stage}-OrdersTable
+    
+    CartTableName:
+      Value: !Ref CartTable
+      Export:
+        Name: ${self:service}-${self:provider.stage}-CartTable
+    
+    ImagesBucketName:
+      Value: !Ref ImagesBucket
+      Export:
+        Name: ${self:service}-${self:provider.stage}-ImagesBucket
+    
+    ApiGatewayUrl:
+      Value: !Sub "https://${ApiGatewayRestApi}.execute-api.${AWS::Region}.amazonaws.com/${self:provider.stage}"
+      Export:
+        Name: ${self:service}-${self:provider.stage}-ApiUrl
+
+plugins:
+  - serverless-offline
+  - serverless-dynamodb-local
